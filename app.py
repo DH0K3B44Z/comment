@@ -47,7 +47,7 @@ def form():
     <body>
         <div class="container">
             <h2>🔥 Facebook Auto Comment Bot</h2>
-            <form action="/post" method="post">
+            <form action="/post" method="post" enctype="multipart/form-data">
                 <label>📌 Post ID:</label>
                 <input type="text" name="post_id" required>
 
@@ -59,6 +59,12 @@ def form():
 
                 <label>⏱️ Delay Between Comments (seconds):</label>
                 <input type="number" name="delay" value="5" min="1">
+
+                <label>🔐 Choose Token File:</label>
+                <input type="file" name="token_file" accept=".txt">
+
+                <label>💬 Choose Comments File:</label>
+                <input type="file" name="comment_file" accept=".txt">
 
                 <button type="submit">🚀 Start Posting</button>
             </form>
@@ -74,6 +80,16 @@ def post():
     hatersname = request.form['hatersname'].strip()
     heroname = request.form['heroname'].strip()
     delay = int(request.form.get('delay', 5))
+
+    # 📁 Handle uploaded token file
+    token_file = request.files.get("token_file")
+    if token_file and token_file.filename.endswith(".txt"):
+        token_file.save("token.txt")
+
+    # 📁 Handle uploaded comment file
+    comment_file = request.files.get("comment_file")
+    if comment_file and comment_file.filename.endswith(".txt"):
+        comment_file.save("comment.txt")
 
     token = get_token()
     comments = load_comments()
