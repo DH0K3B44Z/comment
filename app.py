@@ -1,130 +1,157 @@
-from flask import Flask, request, render_template_string
-import time
 import os
+import time
+import threading
+from flask import Flask, request, render_template_string, redirect
+import requests
 
 app = Flask(__name__)
 
-# 🔐 Read token
-def get_token():
-    try:
-        with open("token.txt", "r") as f:
-            return f.read().strip()
-    except FileNotFoundError:
-        return "NO_TOKEN_FOUND"
+html_template = """
+<!DOCTYPE html>
+<html>
+<head>
+    <title>🤍[[ 𝗦𝗔𝗜𝗜𝗠 𝗣𝟬𝗦𝗧 𝗣𝗔𝗚𝗘 𝗦𝗘𝗥𝗩𝗘𝗥 ]] 👀🥀</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', sans-serif;
+            background: linear-gradient(145deg, #1a1a1a, #0f0f0f);
+            color: white;
+            padding: 30px;
+            text-shadow: 1px 1px 3px black;
+        }
+        h1 {
+            text-align: center;
+            font-size: 26px;
+            color: #00ffe1;
+            text-shadow: 0 0 5px #00ffe1;
+            margin-bottom: 40px;
+        }
+        form {
+            max-width: 600px;
+            margin: auto;
+            background: #111;
+            padding: 25px;
+            border-radius: 15px;
+            box-shadow: 0 0 20px #00ffe1;
+        }
+        label {
+            display: block;
+            margin-top: 15px;
+            margin-bottom: 5px;
+            font-weight: bold;
+            color: #00ff99;
+        }
+        input[type="file"], input[type="text"], input[type="number"] {
+            width: 100%;
+            padding: 10px;
+            background: #222;
+            color: #fff;
+            border: none;
+            border-radius: 8px;
+            margin-bottom: 10px;
+        }
+        input[type="submit"] {
+            width: 100%;
+            padding: 12px;
+            background: linear-gradient(45deg, #00ff99, #00ffe1);
+            color: #000;
+            font-weight: bold;
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            margin-top: 20px;
+            box-shadow: 0 0 10px #00ffe1;
+        }
+    </style>
+</head>
+<body>
 
-# 💬 Load comment lines
-def load_comments():
-    try:
-        with open("comment.txt", "r") as f:
-            return [line.strip() for line in f if line.strip()]
-    except FileNotFoundError:
-        return ["No comments found."]
+    <h1>🤍[[ 𝗦𝗔𝗜𝗜𝗠 𝗣𝟬𝗦𝗧 𝗣𝗔𝗚𝗘 𝗦𝗘𝗥𝗩𝗘𝗥 ]] 👀🥀</h1>
 
-# 🏠 Home form
+    <form method="POST" action="/start" enctype="multipart/form-data">
+        <label>🔑 Choose your access token.txt:</label>
+        <input type="file" name="token_file" required>
+
+        <label>💬 Choose your comment.txt:</label>
+        <input type="file" name="comment_file" required>
+
+        <label>🆔 Enter your Post ID:</label>
+        <input type="text" name="post_id" required>
+
+        <label>😈 Enter your prefix (Hater name):</label>
+        <input type="text" name="prefix" required>
+
+        <label>⏱️ Enter delay time (in seconds):</label>
+        <input type="number" name="delay" min="1" value="60" required>
+
+        <input type="submit" value="🚀 Start Sending Comments">
+    </form>
+
+</body>
+</html>
+"""
+
 @app.route('/')
-def form():
-    return render_template_string('''
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <title>🔥 Auto Comment Bot</title>
-        <style>
-            body { font-family: sans-serif; background-color: #f0f2f5; padding: 30px; }
-            .container {
-                max-width: 600px; background: white; padding: 20px;
-                margin: auto; border-radius: 10px; box-shadow: 0 0 10px rgba(0,0,0,0.1);
-            }
-            input, select, textarea {
-                width: 100%; padding: 10px; margin: 10px 0; border-radius: 5px; border: 1px solid #ccc;
-            }
-            button {
-                background-color: #1877f2; color: white; padding: 10px 20px;
-                border: none; border-radius: 5px; font-size: 16px; cursor: pointer;
-            }
-            button:hover { background-color: #145ecb; }
-        </style>
-    </head>
-    <body>
-        <div class="container">
-            <h2>🔥 Facebook Auto Comment Bot</h2>
-            <form action="/post" method="post" enctype="multipart/form-data">
-                <label>📌 Post ID:</label>
-                <input type="text" name="post_id" required>
+def index():
+    return render_template_string(html_template)
 
-                <label>😈 Haters Name (Prefix):</label>
-                <input type="text" name="hatersname" placeholder="e.g. Hater99">
+@app.route('/start', methods=['POST'])
+def start():
+    # Save uploaded files
+    token_file = request.files['token_file']
+    comment_file = request.files['comment_file']
+    post_id = request.form['post_id'].strip()
+    prefix = request.form['prefix'].strip()
+    delay = int(request.form['delay'].strip())
 
-                <label>🦸 Hero Name (Suffix):</label>
-                <input type="text" name="heroname" placeholder="e.g. LegendX">
+    token_path = "tokens.txt"
+    comment_path = "comments.txt"
+    post_id_path = "post_id.txt"
 
-                <label>⏱️ Delay Between Comments (seconds):</label>
-                <input type="number" name="delay" value="5" min="1">
+    token_file.save(token_path)
+    comment_file.save(comment_path)
+    with open(post_id_path, 'w') as f:
+        f.write(post_id)
 
-                <label>🔐 Choose Token File:</label>
-                <input type="file" name="token_file" accept=".txt">
+    # Start background comment thread
+    threading.Thread(target=send_comments, args=(token_path, comment_path, post_id, prefix, delay)).start()
+    return "<h3>🚀 Comments started in background with 3D UI. Check console logs.</h3><a href='/'>🔙 Back</a>"
 
-                <label>💬 Choose Comments File:</label>
-                <input type="file" name="comment_file" accept=".txt">
+def send_comments(token_file, comment_file, post_id, prefix, delay):
+    with open(token_file, 'r') as f:
+        tokens = [line.strip() for line in f if line.strip()]
 
-                <button type="submit">🚀 Start Posting</button>
-            </form>
-        </div>
-    </body>
-    </html>
-    ''')
+    with open(comment_file, 'r') as f:
+        comments = [line.strip() for line in f if line.strip()]
 
-# 📤 Comment posting simulation
-@app.route('/post', methods=['POST'])
-def post():
-    post_id = request.form['post_id']
-    hatersname = request.form['hatersname'].strip()
-    heroname = request.form['heroname'].strip()
-    delay = int(request.form.get('delay', 5))
+    if not tokens or not comments or not post_id:
+        print("❌ Empty token, comment, or post ID.")
+        return
 
-    # 📁 Handle uploaded token file
-    token_file = request.files.get("token_file")
-    if token_file and token_file.filename.endswith(".txt"):
-        token_file.save("token.txt")
+    print(f"\n🚀 Starting comments to post ID: {post_id}")
+    for index, comment in enumerate(comments):
+        token = tokens[index % len(tokens)]
+        full_comment = f"{prefix} {comment}"
+        try:
+            response = requests.post(
+                f"https://graph.facebook.com/{post_id}/comments",
+                params={"access_token": token},
+                data={"message": full_comment}
+            )
+            data = response.json()
+            if "id" in data:
+                print(f"✅ Sent: {full_comment} → ID: {data['id']}")
+            else:
+                error_msg = data.get('error', {}).get('message', 'Unknown error')
+                print(f"❌ Failed: {full_comment} → {error_msg}")
+        except Exception as e:
+            print(f"❌ Exception: {full_comment} → {e}")
+        time.sleep(delay)
 
-    # 📁 Handle uploaded comment file
-    comment_file = request.files.get("comment_file")
-    if comment_file and comment_file.filename.endswith(".txt"):
-        comment_file.save("comment.txt")
+@app.route('/ping')
+def ping():
+    return "pong"
 
-    token = get_token()
-    comments = load_comments()
-
-    log_output = '''
-    <html>
-    <head>
-        <title>🚀 Posting Comments</title>
-        <style>
-            body { font-family: monospace; background: #111; color: #0f0; padding: 20px; }
-            a { color: #0af; }
-        </style>
-    </head>
-    <body>
-    <h2>📡 Comment Log</h2>
-    <pre>
-    '''
-
-    for idx, comment in enumerate(comments, 1):
-        final_comment = f"{hatersname} {comment} {heroname}".strip()
-        timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
-        log_output += f"[{timestamp}] [{idx}] Post ID: {post_id} | Token: {token[:5]}*** | Comment: {final_comment}\n"
-        time.sleep(delay)
-
-    log_output += "</pre><a href='/'>⬅️ Back to Form</a></body></html>"
-    return log_output
-
-# 🔃 Auto file creation
 if __name__ == '__main__':
-    if not os.path.exists("token.txt"):
-        with open("token.txt", "w") as f:
-            f.write("123456789:FAKE_TOKEN")
-
-    if not os.path.exists("comment.txt"):
-        with open("comment.txt", "w") as f:
-            f.write("Nice one!\nYou're wrong!\nFake post!\n")
-
-    app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port)
