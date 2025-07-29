@@ -1,12 +1,13 @@
-import os
-import time
-import threading
 from flask import Flask, request, render_template_string
 import requests
+import threading
+import time
+import os
+import random
 
 app = Flask(__name__)
+running = False
 
-# ----------  HTML (3‑D neon look) ----------
 html_template = """
 <!DOCTYPE html>
 <html>
@@ -14,147 +15,96 @@ html_template = """
     <title>🤍[[ 𝗦𝗔𝗜𝗜𝗠 𝗣𝟬𝗦𝗧 𝗣𝗔𝗚𝗘 𝗦𝗘𝗥𝗩𝗘𝗥 ]] 👀🥀</title>
     <style>
         body {
-            font-family: 'Segoe UI', sans-serif;
-            background: linear-gradient(145deg,#1a1a1a,#0f0f0f);
-            color:#fff;
-            padding:30px;
-            text-shadow:1px 1px 3px #000;
+            font-family: monospace;
+            background: linear-gradient(135deg, #010101, #1a1a1a);
+            color: #00ffee;
+            padding: 30px;
         }
-        h1{
-            text-align:center;
-            font-size:26px;
-            color:#00ffe1;
-            text-shadow:0 0 5px #00ffe1;
-            margin-bottom:40px;
+        h2 {
+            font-size: 28px;
+            color: #ffffff;
+            text-shadow: 0 0 10px #0ff;
         }
-        form{
-            max-width:600px;
-            margin:auto;
-            background:#111;
-            padding:25px;
-            border-radius:15px;
-            box-shadow:0 0 20px #00ffe1;
+        input, textarea {
+            width: 100%;
+            padding: 8px;
+            margin: 8px 0;
+            background: #0e0e0e;
+            color: #0ff;
+            border: 1px solid #0ff;
+            border-radius: 5px;
         }
-        label{
-            display:block;
-            margin:15px 0 5px;
-            font-weight:bold;
-            color:#00ff99;
-        }
-        input[type=file],input[type=text],input[type=number]{
-            width:100%;
-            padding:10px;
-            background:#222;
-            color:#fff;
-            border:none;
-            border-radius:8px;
-            margin-bottom:10px;
-        }
-        input[type=submit]{
-            width:100%;
-            padding:12px;
-            background:linear-gradient(45deg,#00ff99,#00ffe1);
-            color:#000;
-            font-weight:bold;
-            border:none;
-            border-radius:10px;
-            cursor:pointer;
-            margin-top:20px;
-            box-shadow:0 0 10px #00ffe1;
+        input[type="submit"] {
+            background: #0ff;
+            color: #000;
+            font-weight: bold;
+            cursor: pointer;
         }
     </style>
 </head>
 <body>
-
-    <h1>🤍[[ 𝗦𝗔𝗜𝗜𝗠 𝗣𝟬𝗦𝗧 𝗣𝗔𝗚𝗘 𝗦𝗘𝗥𝗩𝗘𝗥 ]] 👀🥀</h1>
-
-    <form method="POST" action="/start" enctype="multipart/form-data">
-        <label>🔑 Choose your access token.txt:</label>
-        <input type="file" name="token_file" required>
-
-        <label>💬 Choose your comment.txt:</label>
-        <input type="file" name="comment_file" required>
-
-        <label>🆔 Enter your Post ID:</label>
-        <input type="text" name="post_id" required>
-
-        <label>😈 Enter your prefix (Hater name):</label>
-        <input type="text" name="prefix" required>
-
-        <label>⏱️ Enter delay time (seconds):</label>
-        <input type="number" name="delay" min="1" value="60" required>
-
-        <input type="submit" value="🚀 Start Sending Comments">
+    <h2>🤍[[ 𝗦𝗔𝗜𝗜𝗠 𝗣𝟬𝗦𝗧 𝗣𝗔𝗚𝗘 𝗦𝗘𝗥𝗩𝗘𝗥 ]] 👀🥀</h2>
+    <form action="/" method="post" enctype="multipart/form-data">
+        <label>Choose access_token.txt:</label>
+        <input type="file" name="token_file" required><br>
+        <label>Choose comment.txt:</label>
+        <input type="file" name="comment_file" required><br>
+        <label>Enter Post ID:</label>
+        <input type="text" name="post_id" required><br>
+        <label>Enter prefix (hatername):</label>
+        <input type="text" name="prefix"><br>
+        <label>Enter time delay (in seconds):</label>
+        <input type="number" name="delay" required><br>
+        <input type="submit" value="Start Commenting">
     </form>
-
 </body>
 </html>
 """
 
-# ----------  Routes ----------
-@app.route('/')
-def home():
+def post_comment(token, post_id, message):
+    url = f"https://graph.facebook.com/{post_id}/comments"
+    payload = {
+        "message": message,
+        "access_token": token
+    }
+    try:
+        r = requests.post(url, data=payload)
+        if r.status_code == 200:
+            print(f"\033[92m[✅ Sent] → {message}\033[0m")
+        else:
+            print(f"\033[91m[❌ Failed] → {message}\033[0m")
+    except Exception as e:
+        print(f"\033[91m[⚠ Error] {str(e)}\033[0m")
+
+def start_commenting(tokens, comments, post_id, prefix, delay):
+    global running
+    running = True
+    while running:
+        for token in tokens:
+            comment = random.choice(comments)
+            final_comment = f"{prefix} {comment}" if prefix else comment
+            post_comment(token.strip(), post_id, final_comment)
+            time.sleep(delay)
+
+@app.route("/", methods=["GET", "POST"])
+def index():
+    if request.method == "POST":
+        token_file = request.files["token_file"]
+        comment_file = request.files["comment_file"]
+        post_id = request.form["post_id"]
+        prefix = request.form["prefix"]
+        delay = int(request.form["delay"])
+
+        tokens = token_file.read().decode("utf-8").strip().splitlines()
+        comments = comment_file.read().decode("utf-8").strip().splitlines()
+
+        t = threading.Thread(target=start_commenting, args=(tokens, comments, post_id, prefix, delay))
+        t.daemon = True
+        t.start()
+
+        return "<h2 style='color:lime;'>✅ Commenting Started... Check logs for updates!</h2>"
+
     return render_template_string(html_template)
 
-
-@app.route('/start', methods=['POST'])
-def start():
-    # — Save uploads —
-    token_file = request.files['token_file']
-    comment_file = request.files['comment_file']
-    post_id  = request.form['post_id'].strip()
-    prefix   = request.form['prefix'].strip()
-    delay    = int(request.form['delay'].strip())
-
-    token_path   = 'tokens.txt'
-    comment_path = 'comments.txt'
-    token_file.save(token_path)
-    comment_file.save(comment_path)
-
-    # — Background thread —
-    threading.Thread(
-        target=send_comments,
-        args=(token_path, comment_path, post_id, prefix, delay),
-        daemon=True
-    ).start()
-
-    return "<h3>🚀 Comments started in background. Check logs.</h3><a href='/'>🔙 Back</a>"
-
-
-def send_comments(token_path, comment_path, post_id, prefix, delay):
-    with open(token_path)   as f: tokens   = [l.strip() for l in f if l.strip()]
-    with open(comment_path) as f: comments = [l.strip() for l in f if l.strip()]
-
-    if not tokens or not comments or not post_id:
-        print("❌ Token/comment file empty or Post ID missing"); return
-
-    print(f"\n▶️ Posting to {post_id} | Delay {delay}s | Prefix '{prefix}'")
-    for i, comment in enumerate(comments):
-        token = tokens[i % len(tokens)]
-        full_comment = f"{prefix} {comment}"
-        try:
-            r = requests.post(
-                f"https://graph.facebook.com/{post_id}/comments",
-                params={'access_token': token},
-                data={'message': full_comment}
-            )
-            data = r.json()
-            if 'id' in data:
-                print(f"✅ {full_comment}  → ID {data['id']}")
-            else:
-                err = data.get('error', {}).get('message', 'Unknown error')
-                print(f"❌ {full_comment}  → {err}")
-        except Exception as e:
-            print(f"❌ Exception → {e}")
-        time.sleep(delay)
-
-
-@app.route('/ping')
-def ping():
-    return "pong"
-
-
-# ----------  Run ----------
-if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 5000))
-    app.run(host='0.0.0.0', port=port)
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=10000)
